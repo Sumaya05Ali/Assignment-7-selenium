@@ -51,7 +51,7 @@ def select_currency(currency_code):
         currency_dropdown.click()
 
         # Wait for the currency options to load and be clickable
-        time.sleep(2)  # Added delay to make sure options are fully visible
+        time.sleep(2)  
 
         # Find the currency option based on the currency code
         currency_option = WebDriverWait(driver, 10).until(
@@ -70,7 +70,7 @@ def select_currency(currency_code):
             driver.execute_script("arguments[0].click();", currency_option)
 
         # Wait for the currency to change and reflect on the page
-        time.sleep(3)  # Add delay to allow prices to update
+        time.sleep(3)  
 
         # Ensure the property prices are updated
         property_prices = driver.find_elements(By.CLASS_NAME, "js-price-value")
@@ -129,7 +129,7 @@ def save_currency_test_results():
     # Check if the "Currency Test" sheet already exists, otherwise create it
     if 'Currency Test' not in workbook.sheetnames:
         sheet = workbook.create_sheet(title='Currency Test')
-        sheet.append(['Currency', 'Passed/Fail', 'Comments'])  # Add headers
+        sheet.append(['Currency', 'Passed/Fail', 'Comments']) 
     else:
         sheet = workbook['Currency Test']
 
