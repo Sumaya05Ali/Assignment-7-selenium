@@ -1,145 +1,144 @@
+import requests
 import openpyxl
+import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException
+from webdriver_manager.chrome import ChromeDriverManager
 import time
 import os
+from openpyxl import Workbook
+
+
+
+
+# Function to select currency and verify price changes
+def select_currency_and_verify():
+    initial_prices = [price.text for price in driver.find_elements(By.CLASS_NAME, 'js-price-value')]
+
+    for currency in currency_options:
+       
+        print(f"Selecting currency: {currency["symbol"]}")
+        
+        # Click the currency option
+        dropdown.click()
+        # Locate the option based on the country
+        option = next(
+            (opt for opt in options if opt.get_attribute("data-currency-country") == currency["country"]), None
+        )
+
+
+        # Scroll the option into view and click
+        driver.execute_script("arguments[0].scrollIntoView();", option)
+        WebDriverWait(driver, 10).until(EC.element_to_be_clickable(option)).click()
+
+
+        # Capture the new prices
+        new_prices = [price.text for price in driver.find_elements(By.CLASS_NAME, 'js-price-value')]
+        print(initial_prices)
+        print(new_prices)
+
+
+        # Check if prices changed
+        if new_prices != initial_prices:
+            print(f"Currency change detected for {currency["symbol"]}. Prices updated.")
+            currency_data.append({"currency_option": {currency["symbol"]}, "price_changed": "YES"})
+        else:
+            print(f"Currency change for {currency["symbol"]} did not update the prices.")
+            currency_data.append({"currency_option": {currency["symbol"]}, "price_changed": "NO"})
+
+        time.sleep(1)
+
 
 # Initialize WebDriver
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
 
-# Open the target URL
+# Define the correct URL of the property
 url = "https://www.alojamiento.io/property/habitaci%c3%b3n-familiar/BC-5546696"
 driver.get(url)
 
-# Wait for the currency dropdown to be present
-try:
-    currency_dropdown = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.ID, 'js-currency-sort-footer'))
-    )
-except TimeoutException:
-    print("Currency dropdown not found on the page. Please check the element ID.")
-    driver.quit()
-    exit()
+WebDriverWait(driver, 20).until(
+    EC.presence_of_element_located((By.TAG_NAME, "body"))
+)
+    
+# Scroll to the bottom of the page multiple times to ensure lazy-loaded content is visible
+for _ in range(3):
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    time.sleep(2)
 
-WebDriverWait(driver, 30).until(
-    EC.element_to_be_clickable((By.ID, "js-currency-sort-footer'"))
+dropdown = WebDriverWait(driver, 10).until(
+    EC.element_to_be_clickable((By.ID, "js-currency-sort-footer"))
 )
 
-# List to store the test results
-currency_test_results = []
 
-# Helper function to log test results
-def log_currency_test(currency, passed, comments):
-    currency_test_results.append({
-        "currency": currency,
-        "passed/fail": "Passed" if passed else "Failed",
-        "comments": comments
-    })
+# Find the currency options (assuming the list items represent currencies)
+options = dropdown.find_elements(By.CSS_SELECTOR, ".select-ul > li")
+dropdown.click()
 
-# Function to select currency from the dropdown
-def select_currency(currency_code):
-    try:
-        # Scroll the dropdown into view
-        driver.execute_script("arguments[0].scrollIntoView(true);", currency_dropdown)
-        
-        # Click to open the dropdown
-        currency_dropdown.click()
 
-        # Wait for the currency options to load and be clickable
-        time.sleep(2)  
+currency_options = []
+for option in options:
+    data_country = option.get_attribute("data-currency-country")
+    currency_element = option.find_element(By.CSS_SELECTOR, ".option > p")
+    currency_symbol = currency_element.text.split(" ")[0].strip()
+    currency_options.append({"country": data_country, "symbol": currency_symbol})
 
-        # Find the currency option based on the currency code
-        currency_option = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, f"//li[@data-currency-country='{currency_code}']"))
-        )
+
+# Initialize the list to store data for the DataFrame
+currency_data = []
+
+# Call the function to select currencies and verify price changes
+# select_currency_and_verify()
+initial_prices = [price.text for price in driver.find_elements(By.CLASS_NAME, 'js-price-value')]
+
+for currency in currency_options:
     
-        # Scroll the option into view and ensure it's clickable
-        driver.execute_script("arguments[0].scrollIntoView(true);", currency_option)
-        
-        # Retry the click action in case of element interception
-        try:
-            driver.execute_script("arguments[0].click();", currency_option)
-        except ElementClickInterceptedException:
-            print(f"Element click intercepted for {currency_code}. Retrying...")
-            time.sleep(1)
-            driver.execute_script("arguments[0].click();", currency_option)
+    print(f"Selecting currency: {currency["symbol"]}")
+    
 
-        # Wait for the currency to change and reflect on the page
-        time.sleep(3)  
+    # Locate the option based on the country
+    option = next(
+        (opt for opt in options if opt.get_attribute("data-currency-country") == currency["country"]), None
+    )
 
-        # Ensure the property prices are updated
-        property_prices = driver.find_elements(By.CLASS_NAME, "js-price-value")
-        return all(currency_code in price.text for price in property_prices)
 
-    except (TimeoutException, ElementClickInterceptedException) as e:
-        log_currency_test(currency_code, False, f"Failed to select {currency_code}: {str(e)}")
-        return False
+    # Scroll the option into view and click
+    driver.execute_script("arguments[0].scrollIntoView();", option)
+    WebDriverWait(driver, 10).until(EC.element_to_be_clickable(option)).click()
 
-# Function to test currency change
-def test_currency_change():
-    # Define the currency codes and expected symbols
-    currencies = [
-        ('US', 'USD'),
-        ('CA', 'CAD'),
-        ('BE', 'EUR'),
-        ('IE', 'GBP'),
-        ('AU', 'AUD'),
-        ('SG', 'SGD'),
-        ('AE', 'AED'),
-        ('BD', 'BDT')
-    ]
 
-    for country_code, currency in currencies:
-        success = select_currency(country_code)
-        if success:
-            log_currency_test(currency, True, f"Currency changed to {currency} and reflected on the property tiles.")
-        else:
-            log_currency_test(currency, False, f"Currency change to {currency} failed.")
 
-    print("Currency test completed.")
+    # Capture the new prices
+    new_prices = [price.text for price in driver.find_elements(By.CLASS_NAME, 'js-price-value')]
+    print(initial_prices)
+    print(new_prices)
 
-# Run the currency change test
-test_currency_change()
+
+    # Check if prices changed
+    if new_prices != initial_prices:
+        print(f"Currency change detected for {currency["symbol"]}. Prices updated.")
+        currency_data.append({"currency_option": {currency["symbol"]}, "price_changed": "YES"})
+    else:
+        print(f"Currency change for {currency["symbol"]} did not update the prices.")
+        currency_data.append({"currency_option": {currency["symbol"]}, "price_changed": "NO"})
+
+    # Reset to the dropdown for the next selection
+    dropdown.click()
+    time.sleep(1)
+
+print("function executed")
+
+# Convert the data to a Pandas DataFrame
+df = pd.DataFrame(currency_data)
+
+# Save the DataFrame to an Excel file
+excel_filename = 'currency_change_report.xlsx'
+df.to_excel(excel_filename, index=False)
 
 # Close the WebDriver
 driver.quit()
 
-# Save the results to the Excel report
-def save_currency_test_results():
-    # Ensure the 'reports' folder exists
-    report_dir = 'reports'
-    if not os.path.exists(report_dir):
-        os.makedirs(report_dir)
-
-    # Path to the Excel file
-    excel_filename = os.path.join(report_dir, 'test_report.xlsx')
-
-    # Open the Excel file or create a new one if it doesn't exist
-    if not os.path.exists(excel_filename):
-        workbook = openpyxl.Workbook()
-        workbook.save(excel_filename)
-
-    workbook = openpyxl.load_workbook(excel_filename)
-
-    # Check if the "Currency Test" sheet already exists, otherwise create it
-    if 'Currency Test' not in workbook.sheetnames:
-        sheet = workbook.create_sheet(title='Currency Test')
-        sheet.append(['Currency', 'Passed/Fail', 'Comments']) 
-    else:
-        sheet = workbook['Currency Test']
-
-    # Append the test results
-    for result in currency_test_results:
-        sheet.append([result["currency"], result["passed/fail"], result["comments"]])
-
-    # Save the updated workbook
-    workbook.save(excel_filename)
-    print(f"Currency test results saved to {excel_filename}")
-
-# Save the currency test results to the Excel sheet
-save_currency_test_results()
+print(f"Currency change report saved to {excel_filename}")
